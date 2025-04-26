@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Health Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 600px;
+      background: white;
+      margin: auto;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+    }
+
+    h1, h2 {
+      color: #333;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 28px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 12px;
+      margin: 12px 0;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background-color: #f8f9fa;
+      font-size: 16px;
+      box-sizing: border-box;
+      transition: all 0.3s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border: 1px solid #28a745;
+      box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+    }
+
+    button {
+      padding: 12px 18px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #218838;
+      transform: scale(1.05);
+    }
+
+    .scroll-feature {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+    }
+
+    .scroll-flex {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .scroll-flex input[type=number] {
+      width: 140px;
+    }
+
+    .result-box {
+      font-weight: bold;
+      margin-top: 10px;
+      background-color: #f8f9fa;
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 600px) {
+      .container {
+        padding: 15px;
+      }
+
+      h1, h2 {
+        font-size: 24px;
+      }
+
+      .scroll-flex {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      input[type=number], input[type=range] {
+        width: 100%;
+      }
+
+      button {
+        width: 100%;
+        padding: 14px;
+        font-size: 18px;
+      }
+    }
+
+    /* 3D Buttons and Shadows */
+    .button-3d {
+      position: relative;
+      display: inline-block;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+      transition: all 0.3s ease;
+    }
+
+    .button-3d:hover {
+      box-shadow: 0 15px 25px rgba(0, 0, 0, 0.2);
+      transform: translateY(-4px);
+    }
+
+    .button-3d:active {
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+      transform: translateY(2px);
+    }
+  </style>
+  <!-- Chart.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Health Tracker</h1>
+
+    <!-- BMI and Calories -->
+    <section>
+      <h2>BMI Calculator</h2>
+      <input type="number" id="weight" placeholder="Weight (kg)" onchange="generateRecommendations()">
+      <input type="number" id="height" placeholder="Height (cm)" onchange="generateRecommendations()">
+    </section>
+
+    <section>
+      <h2>Calorie Tracker</h2>
+      <input type="number" id="caloriesIn" placeholder="Calories Consumed (per day)">
+      <input type="number" id="caloriesOut" placeholder="Calories Burned (per day)">
+      <button class="button-3d" onclick="analyzeHealth()">Analyze Health</button>
+      <p id="bmiResult"></p>
+      <p id="calorieResult"></p>
+      <p id="adviceResult"></p>
+    </section>
+
+    <!-- Independent Weight Gain Estimator -->
+    <section class="scroll-feature">
+      <h2>Weight Gain Estimator</h2>
+      <label for="surplusSlider">Daily Calorie Surplus:</label>
+      <div class="scroll-flex">
+        <input type="range" id="surplusSlider" min="100" max="10000" value="500" step="50" oninput="syncSurplus('slider')">
+        <input type="number" id="surplusInput" min="100" max="10000" value="500" step="50" oninput="syncSurplus('input')">
+      </div>
+
+      <label for="goalWeight">Target Weight Gain (kg):</label>
+      <input type="number" id="goalWeight" value="5" min="0.5" step="0.5" oninput="updateSurplusEstimate()">
+
+      <div class="result-box">
+        <p id="surplusEstimate"></p>
+        <p id="finalWeightInfo"></p>
+      </div>
+    </section>
+
+    <!-- Weekly Progress Chart -->
+    <section>
+      <h2>Weekly Progress Chart</h2>
+      <canvas id="progressChart" width="400" height="200"></canvas>
+    </section>
+
+    <!-- Save Progress as PDF -->
+    <section>
+      <button class="button-3d" onclick="downloadPDF()">Download Progress as PDF</button>
+    </section>
+    
+    <!-- Personalized Recommendations -->
+    <section>
+      <h2>Personalized Recommendations</h2>
+      <p id="recommendations"></p>
+    </section>
+  </div>
+
+  <script>
+    let progressData = {
+      weights: [],
+      calories: [],
+      labels: []
+    };
+
+    function analyzeHealth() {
+      const weight = parseFloat(document.getElementById('weight').value);
+      const heightCm = parseFloat(document.getElementById('height').value);
+      const caloriesIn = parseFloat(document.getElementById('caloriesIn').value);
+      const caloriesOut = parseFloat(document.getElementById('caloriesOut').value);
+
+      if (!weight || !heightCm || isNaN(caloriesIn) || isNaN(caloriesOut)) {
+        alert("Please fill in all fields correctly.");
+        return;
+      }
+
+      const height = heightCm / 100;
+      const bmi = (weight / (height * height)).toFixed(2);
+      let category = "";
+      if (bmi < 18.5) category = "Underweight";
+      else if (bmi < 25) category = "Normal weight";
+      else if (bmi < 30) category = "Overweight";
+      else category = "Obese";
+
+      document.getElementById('bmiResult').innerText = `Your BMI is ${bmi} (${category})`;
+
+      const netCalories = caloriesIn - caloriesOut;
+      const weeklyCalorieDeficit = netCalories * 7;
+      const weightChangePerWeek = (weeklyCalorieDeficit / 7700).toFixed(2);
+
+      let advice = `Net Calories/day: ${netCalories} kcal.\n`;
+      let timeEstimate = "";
+
+      if (category === "Normal weight") {
+        advice += "You're maintaining a healthy weight.";
+      } else {
+        let targetWeight;
+        if (category === "Underweight") {
+          targetWeight = 18.5 * height * height;
+        } else {
+          targetWeight = 24.9 * height * height;
+        }
+
+        const weightDiff = (targetWeight - weight).toFixed(2);
+        const weeksNeeded = weightChangePerWeek != 0 
+          ? Math.abs((weightDiff / weightChangePerWeek).toFixed(1)) 
+          : "N/A";
+
+        advice += category === "Underweight" ? 
+          `You should aim to gain around ${Math.abs(weightDiff)} kg.` :
+          `You should aim to lose around ${Math.abs(weightDiff)} kg.`;
+
+        timeEstimate = weeksNeeded !== "N/A"
+          ? `Estimated time to reach healthy BMI: ~${weeksNeeded} weeks.`
+          : `You're not currently in a calorie surplus/deficit to change weight.`;
+      }
+
+      document.getElementById('calorieResult').innerText = `Weight change rate: ${weightChangePerWeek} kg/week`;
+      document.getElementById('adviceResult').innerText = `${advice}\n${timeEstimate}`;
+    }
+
+    function syncSurplus(source) {
+      const slider = document.getElementById('surplusSlider');
+      const input = document.getElementById('surplusInput');
+
+      if (source === 'slider') {
+        input.value = slider.value;
+      } else {
+        let val = parseInt(input.value);
+        if (isNaN(val)) val = 100;
+        if (val < 100) val = 100;
+        if (val > 10000) val = 10000;
+        input.value = val;
+        slider.value = val;
+      }
+
+      updateSurplusEstimate();
+    }
+
+    function updateSurplusEstimate() {
+      const surplus = parseInt(document.getElementById('surplusSlider').value);
+      const goalWeight = parseFloat(document.getElementById('goalWeight').value);
+      const weeks = ((goalWeight * 7700) / (surplus * 7)).toFixed(1);
+
+      document.getElementById('surplusEstimate').innerText =
+        `Estimated time to gain ${goalWeight} kg: ${weeks} weeks at ${surplus} kcal/day surplus.`;
+
+      const weight = parseFloat(document.getElementById('weight').value);
+      const heightCm = parseFloat(document.getElementById('height').value);
+
+      if (!isNaN(weight) && !isNaN(heightCm)) {
+        const finalWeight = weight + goalWeight;
+        const height = heightCm / 100;
+        const finalBMI = (finalWeight / (height * height)).toFixed(2);
+        document.getElementById('finalWeightInfo').innerText =
+          `Projected weight after gain: ${finalWeight} kg | Projected BMI: ${finalBMI}`;
+      } else {
+        document.getElementById('finalWeightInfo').innerText = "";
+      }
+    }
+
+    // Chart.js - Weekly Progress Chart
+    function generateProgressChart() {
+      const ctx = document.getElementById('progressChart').getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: progressData.labels,
+          datasets: [
+            {
+              label: 'Weight (kg)',
+              data: progressData.weights,
+              borderColor: 'rgba(75, 192, 192, 1)',
+              fill: false
+            },
+            {
+              label: 'Calories (kcal)',
+              data: progressData.calories,
+              borderColor: 'rgba(153, 102, 255, 1)',
+              fill: false
+            }
+          ]
+        }
+      });
+    }
+
+    // Save Progress as PDF
+    function downloadPDF() {
+      const doc = new jsPDF();
+      doc.text("Health Progress Report", 20, 20);
+      doc.text(`Weight: ${document.getElementById('weight').value} kg`, 20, 30);
+      doc.text(`Height: ${document.getElementById('height').value} cm`, 20, 40);
+      doc.text(`Calories Consumed: ${document.getElementById('caloriesIn').value}`, 20, 50);
+      doc.text(`Calories Burned: ${document.getElementById('caloriesOut').value}`, 20, 60);
+      doc.text(`Surplus: ${document.getElementById('surplusSlider').value} kcal`, 20, 70);
+      doc.text(`Estimated Weight Gain: ${document.getElementById('goalWeight').value} kg`, 20, 80);
+      doc.save('progress_report.pdf');
+    }
+
+    // Personalized Recommendations
+    function generateRecommendations() {
+      const weight = parseFloat(document.getElementById('weight').value);
+      const height = parseFloat(document.getElementById('height').value);
+      let recommendations = "";
+
+      if (weight && height) {
+        const bmi = (weight / ((height / 100) * (height / 100))).toFixed(2);
+        if (bmi < 18.5) {
+          recommendations = "You are underweight. It is recommended to consume more calories and focus on strength training to build muscle mass.";
+        } else if (bmi < 25) {
+          recommendations = "You are in a healthy weight range. Keep up the good work! Maintain a balanced diet and stay active.";
+        } else {
+          recommendations = "You are overweight. Consider focusing on a balanced diet and incorporating more cardiovascular activities.";
+        }
+      }
+
+      document.getElementById('recommendations').innerText = recommendations;
+    }
+
+    // Initialize on load
+    window.onload = function() {
+      generateProgressChart();
+      generateRecommendations();
+    }
+  </script>
+  <!-- jsPDF Library for PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</body>
+</html>
